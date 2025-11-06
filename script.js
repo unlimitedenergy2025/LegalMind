@@ -157,7 +157,7 @@ const legalSystem = {
                     id: "article97",
                     number: 97,
                     title: "المادة 97",
-                    content: `لا يجوز لأحد أن يتكلم إلا بعد أن يطلب الكلام ويأذن له الرئيس، وإلا فللرئيس أن يمنعه من الكلام ويأمر بعدم إثبات أقواله في محضر الجلسة.`
+                    content: `لا يجوز لأحد أن يتكلم إلا بعد أن يطلب الكلام ويأذن له الرئيس، وإذا فللرئيس أن يمنعه من الكلام ويأمر بعدم إثبات أقواله في محضر الجلسة.`
                 },
                 {
                     id: "article98",
@@ -353,14 +353,6 @@ class NavigationSystem {
             });
         }
 
-        // Theme toggle
-        const themeToggle = document.getElementById('themeToggle');
-        if (themeToggle) {
-            themeToggle.addEventListener('click', () => {
-                this.toggleTheme();
-            });
-        }
-
         // Close mobile menu when clicking on links
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', () => {
@@ -390,6 +382,14 @@ class NavigationSystem {
         if (sidebarSearch) {
             sidebarSearch.addEventListener('input', (e) => {
                 this.filterChapters(e.target.value);
+            });
+        }
+
+        // PDF Export
+        const pdfBtn = document.getElementById('pdfBtn');
+        if (pdfBtn) {
+            pdfBtn.addEventListener('click', () => {
+                this.exportToPDF();
             });
         }
     }
@@ -510,8 +510,8 @@ class NavigationSystem {
 
         const isBookmarked = this.bookmarks.some(b => b.id === this.currentArticle.id);
         bookmarkBtn.innerHTML = isBookmarked ? 
-            '<span>🔖</span> محفوظة' : 
-            '<span>🔖</span> حفظ';
+            '<i class="fas fa-bookmark"></i> محفوظة' : 
+            '<i class="fas fa-bookmark"></i> حفظ';
         
         bookmarkBtn.classList.toggle('active', isBookmarked);
     }
@@ -847,30 +847,6 @@ class NavigationSystem {
         }
     }
 
-    toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('legalmind-theme', newTheme);
-        
-        // Update theme button icon
-        const themeIcon = document.querySelector('.theme-icon');
-        if (themeIcon) {
-            themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-        }
-    }
-
-    loadTheme() {
-        const savedTheme = localStorage.getItem('legalmind-theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        
-        const themeIcon = document.querySelector('.theme-icon');
-        if (themeIcon) {
-            themeIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-        }
-    }
-
     updateStatistics() {
         const stats = legalSystem.getStatistics();
         
@@ -902,6 +878,172 @@ class NavigationSystem {
                 notification.parentNode.removeChild(notification);
             }
         }, 3000);
+    }
+
+    // إضافة دالة محسنة لتصدير PDF
+    exportToPDF() {
+        let content = '';
+        let title = 'النظام الداخلي لمجلس النواب الأردني';
+        
+        if (this.currentArticle) {
+            content = this.generatePDFArticle(this.currentChapter, this.currentArticle);
+            title = `${this.currentArticle.title} - ${this.currentChapter.title}`;
+        } else if (this.currentChapter) {
+            content = this.generatePDFChapter(this.currentChapter);
+            title = this.currentChapter.title;
+        } else {
+            content = this.generatePDFWelcome();
+        }
+
+        // إضافة معلومات المشرفين
+        const supervisorsContent = this.generatePDFSupervisors();
+        
+        const pdfContent = this.generatePDFTemplate(title, content + supervisorsContent);
+        
+        // إنشاء عنصر مؤقت لتوليد PDF
+        const element = document.createElement('div');
+        element.innerHTML = pdfContent;
+        document.body.appendChild(element);
+
+        // خيارات PDF
+        const options = {
+            margin: [10, 10, 10, 10],
+            filename: `legalmind-${title.replace(/\s+/g, '-')}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { 
+                scale: 2,
+                useCORS: true,
+                logging: false
+            },
+            jsPDF: { 
+                unit: 'mm', 
+                format: 'a4', 
+                orientation: 'portrait'
+            },
+            pagebreak: { 
+                mode: ['avoid-all', 'css', 'legacy'] 
+            }
+        };
+
+        // توليد PDF
+        html2pdf().set(options).from(element).save().then(() => {
+            // إزالة العنصر المؤقت
+            document.body.removeChild(element);
+            this.showNotification('تم تصدير الملف بنجاح', 'success');
+        }).catch((error) => {
+            console.error('PDF generation error:', error);
+            this.showNotification('حدث خطأ في تصدير الملف', 'error');
+            document.body.removeChild(element);
+        });
+    }
+
+    // تحديث قالب PDF ليشمل العلامات المائية
+    generatePDFTemplate(title, content) {
+        return `
+            <div class="pdf-template">
+                <div class="pdf-cover">
+                    <div class="logo">
+                        <div style="width:120px;height:120px;background:#1a365d;color:white;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:24px;font-weight:bold;margin:0 auto 20px;">LM</div>
+                        <h1>${legalSystem.meta.title}</h1>
+                    </div>
+                    <div class="edition">${legalSystem.meta.edition} - ${legalSystem.meta.year}</div>
+                </div>
+                <div class="pdf-content">
+                    <div class="pdf-header">
+                        <h2>${title}</h2>
+                    </div>
+                    ${content}
+                </div>
+                <div class="pdf-footer">
+                    تم استخراجه من منصة LegalMind - ${new Date().toLocaleDateString('ar-EG')}
+                </div>
+            </div>
+        `;
+    }
+
+    // إضافة محتوى المشرفين
+    generatePDFSupervisors() {
+        return `
+            <div class="pdf-supervisors">
+                <h3>الفريق المشرف على المنصة</h3>
+                <div class="supervisors-list">
+                    <div class="supervisor-card">
+                        <strong>فرحان الخوالدة</strong>
+                        <span>مشارك في مشروع الزمالة البرلمانية</span>
+                    </div>
+                    <div class="supervisor-card">
+                        <strong>سلمى بجق</strong>
+                        <span>مشاركة في مشروع الزمالة البرلمانية</span>
+                    </div>
+                    <div class="supervisor-card">
+                        <strong>حسام الحسبان</strong>
+                        <span>مشارك في مشروع الزمالة البرلمانية</span>
+                    </div>
+                </div>
+                <p>مشروع الزمالة البرلمانية - أحد برامج صندوق الملك عبدالله الثاني للتنمية</p>
+            </div>
+        `;
+    }
+
+    // تحديد محتوى الفصل لـ PDF
+    generatePDFChapter(chapter) {
+        let content = `
+            <div class="pdf-article">
+                <h3>${chapter.title}</h3>
+                <p><strong>الفصل ${chapter.number}</strong> - ${chapter.articles.length} مادة</p>
+            </div>
+        `;
+
+        chapter.articles.forEach(article => {
+            content += `
+                <div class="pdf-article">
+                    <h3>${article.title}</h3>
+                    <div>${this.formatArticleContentForPDF(article.content)}</div>
+                </div>
+            `;
+        });
+
+        return content;
+    }
+
+    // تحديد محتوى المادة لـ PDF
+    generatePDFArticle(chapter, article) {
+        return `
+            <div class="pdf-article">
+                <h3>${chapter.title}</h3>
+                <h4>${article.title}</h4>
+                <div>${this.formatArticleContentForPDF(article.content)}</div>
+            </div>
+        `;
+    }
+
+    // تحديث دالة التنسيق للمحتوى
+    formatArticleContentForPDF(content) {
+        const paragraphs = content.split('\n').filter(p => p.trim());
+        let html = '';
+        
+        paragraphs.forEach(paragraph => {
+            if (/^[أ-ي]\./.test(paragraph.trim())) {
+                html += `<h4 style="color: #1a365d; margin: 0.5cm 0 0.3cm 0; border-right: 2px solid #1a365d; padding-right: 0.3cm;">${paragraph.trim()}</h4>`;
+            } else {
+                html += `<p style="margin-bottom: 0.4cm; text-align: justify; line-height: 1.6;">${paragraph.trim()}</p>`;
+            }
+        });
+        
+        return html;
+    }
+
+    generatePDFWelcome() {
+        return `
+            <div class="pdf-article">
+                <h3>مرحباً بكم في منصة LegalMind</h3>
+                <p>النظام الداخلي لمجلس النواب الأردني مع جميع التعديلات</p>
+                <p>${legalSystem.meta.edition} - ${legalSystem.meta.year}</p>
+                <p>إجمالي الفصول: ${legalSystem.chapters.length}</p>
+                <p>إجمالي المواد: ${legalSystem.getStatistics().articles}</p>
+                <p>إجمالي الصفحات: ${legalSystem.meta.totalPages}</p>
+            </div>
+        `;
     }
 }
 
@@ -1292,17 +1434,11 @@ class LegalMindApp {
             window.navigation = new NavigationSystem();
             window.searchSystem = new SearchSystem();
 
-            // Load saved theme
-            navigation.loadTheme();
-
             // Handle initial URL
             this.handleInitialURL();
 
             // Setup share functionality
             this.setupShareFunctionality();
-
-            // Setup images fallback
-            this.setupImageFallbacks();
 
             // Hide loading spinner
             this.hideLoading();
@@ -1316,19 +1452,6 @@ class LegalMindApp {
             console.error('❌ Failed to initialize LegalMind:', error);
             this.showError('فشل في تحميل التطبيق. يرجى تحديث الصفحة.');
         }
-    }
-
-    setupImageFallbacks() {
-        // Add error handlers for images
-        document.querySelectorAll('img').forEach(img => {
-            img.addEventListener('error', () => {
-                // Replace with placeholder or hide
-                const placeholder = img.closest('.feature-icon, .member-avatar, .logo-image');
-                if (placeholder) {
-                    placeholder.innerHTML = '<div class="image-placeholder">📄</div>';
-                }
-            });
-        });
     }
 
     handleInitialURL() {
